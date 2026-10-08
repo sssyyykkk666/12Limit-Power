@@ -1,62 +1,75 @@
-# FYQMac
+# 12Limit Power
 
-为这台 2017 款 12 英寸 MacBook（MacBook10,1 / Intel Core m3-7Y32 / macOS 13.7.8）配置的中文功耗菜单栏。后端使用 [VoltageShift 1.25](https://github.com/sicreative/VoltageShift)，界面使用 Swift + AppKit。
+为 2017 款 12 英寸 MacBook（MacBook10,1 / Intel Core m3-7Y32 / macOS 13.7.8）定制的轻量中文功耗控制应用。原生 **Swift + AppKit** 设置窗口与菜单栏，后端沿用 [VoltageShift 1.25](https://github.com/sicreative/VoltageShift)。前身是 FYQMac；v1.0.0 历史版本保留。
 
-## 使用
+## 自定义与快捷控制
 
-点击菜单栏 ⚡：
+- 持续功耗 PL1、短时功耗 PL2：0.125W 步进。本机应用范围 3.75–49W，PL2 必须 ≥ PL1；上限读取安装前备份，后端禁止超过它。
+- 允许 / 关闭 Intel 睿频，可与功耗独立组合。
+- PL1 平均时间：沿用原始值，或 1 / 2 / 4 / 8 / 16 / 28 秒。PL2 时间、限值启用与保护位保持原状。
+- 保存 / 载入一组常用配置；保存本身不会改变硬件。成功应用的自定义配置可从菜单栏再次使用。
+- 平衡（5 / 6W、允许睿频）、节能（5 / 5W、关闭睿频）、恢复原始设置。
+- 手动刷新频率、封装功耗、温度及采样时间；同时显示实际硬件限值。
+- 系统启动时恢复最后成功配置；菜单应用在唤醒后重新提交。登录自动启动可切换，默认收起窗口。
 
-- 平衡：PL1 最高 5W，PL2 最高 6W，开启睿频。
-- 节能：PL1/PL2 最高 5W，关闭睿频。
-- 恢复原始设置：还原安装前备份的功耗寄存器，以及当时的睿频开关。
-- 登录时启动菜单栏：控制下次登录是否显示菜单。
-- 查看最近一次读数：显示最近一次应用设置时读取的温度、功耗和频率。不是实时监控。
+双击 `/Applications/12Limit Power.app` 或点击菜单栏的应用名称打开窗口。关闭窗口仍保留菜单栏。退出应用不会取消限制；需要取消时先恢复原始设置。
 
-功耗设置由系统启动服务在开机时恢复。菜单栏应用在唤醒后重新提交上次成功的配置。退出菜单栏不会取消功耗限制；需要取消限制时，先选“恢复原始设置”。
+[英特尔规格](https://www.intel.com/content/www/us/en/products/sku/97538/intel-core-m37y32-processor-4m-cache-up-to-3-00-ghz/specifications.html)列出的 TDP 为 4.5W，配置 TDP 范围为 3.75–7W。**本机原始 49W 是固件功耗限值，不代表无风扇机身能够持续散热 49W。** 窗口标出建议持续范围 3.75–7W；较高的值留给用户主动输入。PL1 是平均封装功耗限值，并非瞬时功耗或整机插座功耗的硬上限。
 
-限值只向下调整，不超过安装前读取的原始限值。原始配置存放在 `/Library/Application Support/FYQMac/baseline.plist`，仅管理员可修改。功耗档位通过寄存器回读验证后才标记为成功。PL1 是持续平均功耗限值，PL2 是短时限值，并非整机插座功耗的硬上限。
+## 频率与 GPU 的实际限制
 
-## 安装位置
+本机读出的睿频上限为单核 3.0GHz、双核 2.6GHz。参考 [TurboTune](https://github.com/tc466/TurboTune) 与 [Intel MSR 手册](https://www.intel.com/content/dam/develop/external/us/en/documents/335592-sdm-vol-4.pdf)，测试降低睿频倍率至 1.2 / 1.8GHz；写入后仍读回原始值，未通过验证，因此不开放指定频率或锁频功能。现有 VoltageShift 驱动的 MSR 读写只在当前执行核心进行，不能保证全核心 HWP 设置；未采用它做假性的全核心限频。
 
-- 应用：`/Applications/FYQMac.app`
-- 后端、备份、状态和日志：`/Library/Application Support/FYQMac`
-- 开机配置：`/Library/LaunchDaemons/local.fyqmac.power.plist`
-- 登录菜单栏配置：`~/Library/LaunchAgents/local.fyqmac.menu.plist`
-- 请求队列：`~/Library/Application Support/FYQMacControl`
+HD Graphics 615 与 CPU 共用封装功耗预算。暂未找到经本机验证有效的原生 macOS 独立 GPU 频率控制接口，因此窗口说明此项不可用。未改电压、GPU 电压、温度保护、风扇或 SIP 配置。
 
-系统服务只在启动或收到请求时执行，然后退出。菜单栏无联网和周期性监控定时器。菜单不会改电压、温度保护、风扇或系统完整性保护配置。
+[CPUFriend](https://github.com/acidanthera/CPUFriend) / [CPUFriendFriend](https://github.com/corpnewt/CPUFriendFriend) 也经过研究：它们依赖内核电源数据注入，未安装到这台原生 Mac。界面分区参考 [Stats](https://github.com/exelban/stats) 的设计思路；未复制其代码或引入实时监控模块。
 
-## 源码与构建
+## 轻量与验证机制
 
-`src/FYQMac.swift` 是菜单栏源码；`scripts/controller.sh` 是固定档位控制器。控制器只接受三个固定档位，不执行请求文件中的命令。机型、RAPL 功耗单位、原始值在首次使用前检查。
+无网络请求、无常驻监控定时器、无第三方 GUI 框架。目录事件通知更新状态；点击应用后只等待一次验证结果。功耗服务收到请求才执行并退出。每次写入都检查回读；失败时回退应用前的功耗及睿频，并验证回退。
+
+输入只允许固定操作和四个整数，不执行用户提供的命令、路径、寄存器或代码。后端再次独立校验范围、步进、PL2/PL1 关系和平均时间。只在回读验证成功后保存开机配置。原始配置由管理员保护。
+
+## 构建和升级
 
 ```sh
-cd /Users/skyfu/Downloads/FYQMac
 bash scripts/build-app.sh
+sudo bash scripts/install-upgrade.sh
 ```
 
-此安装脚本针对当前用户 UID 501 和上述固定机型；不是通用 Mac 安装器。
+构建产物：`build/12Limit Power.app`。升级脚本面向当前用户 UID 501 和现有机型，不是通用 Mac 安装器；它保留安装前原始备份和 v1.0 恢复文件。首次部署仍需已批准的 VoltageShift 驱动及原始备份。
 
-## 验证
+源码：`src/PowerApp.swift`；控制器：`scripts/controller.sh`；纯参数策略：`scripts/power-policy.pl`。
 
-`bash scripts/verify-profiles.sh` 在本机依次应用节能、原始和平衡档，检查功耗限值、睿频开关、其他寄存器位保持原状，并验证完整恢复。最终留在平衡档。
+为保留历史备份、启动任务和设置的兼容性，内部服务标识与存储目录仍沿用 FYQMac：
 
-这证明配置写入和回读一致，不能单独证明所有任务的卡顿已消失。固件或 macOS 的电源管理可能重新设置限值，可用菜单中的“重新应用并刷新状态”复查。
+- 应用：`/Applications/12Limit Power.app`
+- 后端、原始备份和状态：`/Library/Application Support/FYQMac`
+- 系统启动：`/Library/LaunchDaemons/local.fyqmac.power.plist`
+- 登录启动：`~/Library/LaunchAgents/local.fyqmac.menu.plist`
+- 请求队列：`~/Library/Application Support/FYQMacControl`
+
+## 测试
+
+```sh
+python3 -m unittest discover -s tests -v
+```
+
+纯策略测试覆盖边界、畸形输入、时间编码与非目标寄存器位保留。模拟后端测试覆盖自定义、重应用、只读刷新、预设、完整恢复、参数拒绝及写入回读失败后的回退，测试不写真实硬件。`scripts/verify-profiles.sh` 是本机硬件预设测试；`scripts/verify-custom.sh` 检查本机自定义、平均时间、睿频、重应用、越界拒绝、只读刷新及完整恢复，最终留在平衡档。
+
+固件或 macOS 可能再次调整限值。手动刷新显示采样时刻硬件值；重新应用需要选择档位。配置回读一致并不能证明所有任务的卡顿已经消失。
 
 ## 卸载
 
 ```sh
-sudo bash /Users/skyfu/Downloads/FYQMac/scripts/uninstall.sh
+sudo bash scripts/uninstall.sh
 ```
 
-卸载脚本先恢复并验证原始配置，再卸载驱动和移除应用、启动配置。若恢复或驱动卸载失败，保留文件便于继续处理。Git 和 Apple Command Line Tools 会保留。
+先恢复并验证原始配置，再卸载驱动和启动任务。失败时保留文件。Git 和 Apple 开发工具保留。
 
-## 上游与许可
+## 许可与版本
 
-VoltageShift 原版二进制及其源代码归原作者所有，使用 GPL-3.0；上游地址：https://github.com/sicreative/VoltageShift 。本项目源码也按 GPL-3.0 提供，见 LICENSE。
+GPL-3.0，见 LICENSE。VoltageShift 官方 1.25 二进制和上游源码随附；源码快照提交 `a4b02ebbcbdada286e2b49346405d57199b78eab`。研究参考的项目未被打包为新依赖。
 
-## 首个版本
-
-v1.0.0：中文原生菜单栏、三个固定功耗档位、开机恢复、登录启动、唤醒后重应用、原始寄存器备份及回读校验。安装过程的临时排错文件和日志不纳入版本。
-
-上游源代码快照：`sicreative/VoltageShift`，提交 `a4b02ebbcbdada286e2b49346405d57199b78eab`；随附官方 1.25 二进制及 GPL-3.0 许可证。
+- v1.0.0：FYQMac 菜单栏、固定档位、启动恢复和回读验证。
+- v1.1.0：12Limit Power，增加原生窗口、自定义功耗与平均时间、独立睿频、常用配置、实际限值显示及失败回退。

@@ -3,7 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 GH="${FYQMAC_GH:-$HOME/.local/bin/gh}"
 OWNER=sssyyykkk666
-REPO="$OWNER/FYQMac"
+REPO="$OWNER/12Limit-Power"
 KEY="$HOME/.ssh/id_ed25519_fyqmac_github"
 "$GH" auth status --hostname github.com
 ACTUAL=$("$GH" api user --jq .login)
@@ -14,7 +14,7 @@ git diff --cached --quiet
 PUBLIC_KEY=$(awk '{print $1 " " $2}' "$KEY.pub")
 EXISTING_KEYS=$("$GH" api user/keys --paginate --jq '.[].key')
 if ! printf '%s\n' "$EXISTING_KEYS" | grep -Fxq "$PUBLIC_KEY"; then
-  "$GH" ssh-key add "$KEY.pub" --title 'FYQMac Intel Mac'
+  "$GH" ssh-key add "$KEY.pub" --title '12Limit Power Intel Mac'
 fi
 git config core.sshCommand "ssh -i $KEY -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
 SSH_STATUS=0

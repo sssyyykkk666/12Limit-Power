@@ -6,7 +6,7 @@ cat > /Users/skyfu/Library/LaunchAgents/local.fyqmac.menu.plist <<'PLIST'
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>Label</key><string>local.fyqmac.menu</string>
-<key>ProgramArguments</key><array><string>/Applications/FYQMac.app/Contents/MacOS/FYQMac</string></array>
+<key>ProgramArguments</key><array><string>/Applications/12Limit Power.app/Contents/MacOS/12LimitPower</string><string>--background</string></array>
 <key>RunAtLoad</key><true/>
 <key>ProcessType</key><string>Interactive</string>
 </dict></plist>

@@ -3,6 +3,9 @@ set -euo pipefail
 BASE='/Library/Application Support/FYQMac'
 SRC='/Users/skyfu/Downloads/FYQMac'
 cp "$SRC/scripts/controller.sh" "$BASE/controller.sh"
+cp "$SRC/scripts/power-policy.pl" "$BASE/power-policy.pl"
+chown root:wheel "$BASE/power-policy.pl"
+chmod 644 "$BASE/power-policy.pl"
 chown root:wheel "$BASE/controller.sh"
 chmod 755 "$BASE/controller.sh"
 cat > /Library/LaunchDaemons/local.fyqmac.power.plist <<'PLIST'
