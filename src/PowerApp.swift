@@ -23,6 +23,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     var login: NSButton!
     var tau: NSPopUpButton!
     var applyButton: NSButton!
+    var editor: NSPopUpButton!
+    var saveButton: NSButton!
     let windows = [0,1,2,4,8,16,28]
     var preview: Bool { CommandLine.arguments.contains("--preview") }
     func read(_ name: String) -> String {
@@ -81,7 +83,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         row("12Limit Power", #selector(showWindow))
         row(read("status.txt").replacingOccurrences(of: "睿频 1", with: "睿频开").replacingOccurrences(of: "睿频 0", with: "睿频关")).isEnabled = false
         menu.addItem(.separator())
-        for (i,title) in ["平衡 · 5 / 6 W", "节能 · 5 / 5 W · 关闭睿频", "上次自定义配置", "恢复原始设置"].enumerated() {
+        for (i,title) in [presetTitle("balance"), presetTitle("quiet"), "上次自定义配置", "恢复原始设置"].enumerated() {
             let r = row(title, #selector(preset(_:)), tag: i)
             r.state = read("selected.txt") == ["balance","quiet","custom","original"][i] ? .on : .off
             if i == 2 { r.isEnabled = !read("custom.txt").isEmpty }
@@ -132,6 +134,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         sampleLabel = text("",size:13,color:.secondaryLabelColor); add(sampleLabel)
         add(separator())
         add(horizontal([text("功耗设置",size:17,weight:.semibold),spacer(),button("平衡",#selector(preset(_:)),tag:0),button("节能",#selector(preset(_:)),tag:1)]))
+        editor = NSPopUpButton(); editor.addItems(withTitles:["当前 / 自定义","平衡档位","节能档位"])
+        editor.target=self; editor.action=#selector(editorChanged)
+        add(horizontal([text("编辑配置"),spacer(),editor,button("载入默认值",#selector(resetDraft))]))
         add(powerRow("持续功耗 · PL1",index:1)); add(powerRow("短时功耗 · PL2",index:2))
         let max1=maxPower("maxPL1"),max2=maxPower("maxPL2")
         add(text(String(format:"步进 0.125W · PL1 3.75–%.3gW · PL2 ≥ PL1、≤ %.3gW",max1,max2),size:12,color:.secondaryLabelColor))
@@ -141,10 +146,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         add(horizontal([text("持续功耗平均时间"),spacer(),tau]))
         add(text("较短时间会更快压低持续功耗；短时窗口沿用原始值。CPU 频率仍由系统动态调节。",size:12,color:.secondaryLabelColor))
         add(separator())
-        add(text("硬件能力",size:15,weight:.semibold))
-        add(text("CPU 指定频率 / 锁频：本机固件未接受倍率修改。\nGPU 独立调节：暂无本机验证有效的接口；共享封装功耗。",size:12,color:.secondaryLabelColor))
+        add(button("CPU / GPU 频率支持说明…",#selector(frequencyInfo)),full:false)
         applyButton = button("应用自定义",#selector(applyCustom)); applyButton.keyEquivalent = "\r"
-        add(horizontal([button("保存为常用",#selector(saveFavorite)),button("载入常用",#selector(loadFavorite)),spacer(),applyButton]))
+        saveButton=button("保存为常用",#selector(saveFavorite))
+        add(horizontal([saveButton,button("载入常用",#selector(loadFavorite)),spacer(),applyButton]))
         add(horizontal([button("恢复原始设置",#selector(preset(_:)),tag:3),spacer(),button("刷新读数",#selector(refresh)),button("诊断",#selector(diagnose))]))
         login = NSButton(checkboxWithTitle: "登录时启动（窗口保持收起）", target:self, action:#selector(toggleLogin)); add(login)
         add(text("关闭窗口后保留菜单栏；退出应用不会取消已应用的功耗限值。读数按需采样，不持续轮询。",size:11,color:.tertiaryLabelColor))
@@ -154,6 +159,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     }
     func loadFields() {
         let s=json("settings.json")
+        if let slot=editorSlot() { fill(presetValues(slot)); updateEditorTitles(); login?.state=FileManager.default.fileExists(atPath:loginPlist.path) ? .on : .off; return }
+        updateEditorTitles()
         let first: Double = (s["pl1"] as? NSNumber)?.doubleValue ?? 5.0
         let second: Double = (s["pl2"] as? NSNumber)?.doubleValue ?? 6.0
         pl1?.stringValue=String(format:"%.3f",first)
@@ -161,6 +168,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         turbo?.state=((s["turbo"] as? Bool) ?? true) ? .on : .off
         tau?.selectItem(at: windows.firstIndex(of:(s["tau"] as? Int) ?? 0) ?? 0)
         syncSteppers(); login?.state=FileManager.default.fileExists(atPath:loginPlist.path) ? .on : .off
+    }
+    func editorSlot() -> String? { editor?.indexOfSelectedItem == 1 ? "balance" : (editor?.indexOfSelectedItem == 2 ? "quiet" : nil) }
+    func defaultValues(_ slot: String) -> [Int] { slot == "quiet" ? [40,40,0,0] : [40,48,1,0] }
+    func presetValues(_ slot: String) -> [Int] {
+        let v=read("preset-\(slot).txt").split(separator:" ").compactMap { Int($0) }
+        guard v.count==4, v[0]>=30, v[0]<=Int(maxPower("maxPL1")*8), v[1]>=v[0], v[1]<=Int(maxPower("maxPL2")*8), [0,1].contains(v[2]), windows.contains(v[3]) else { return defaultValues(slot) }
+        return v
+    }
+    func presetTitle(_ slot: String) -> String {
+        let v=presetValues(slot)
+        return String(format:"%@ · %.3g / %.3g W · 睿频%@",slot == "balance" ? "平衡":"节能",Double(v[0])/8,Double(v[1])/8,v[2] == 1 ? "开":"关")
+    }
+    func fill(_ v: [Int]) {
+        pl1.stringValue=String(format:"%.3f",Double(v[0])/8); pl2.stringValue=String(format:"%.3f",Double(v[1])/8)
+        turbo.state=v[2] == 1 ? .on : .off; tau.selectItem(at:windows.firstIndex(of:v[3]) ?? 0); syncSteppers()
+    }
+    func updateEditorTitles() {
+        let name=editorSlot().map { $0 == "balance" ? "平衡":"节能" }
+        applyButton?.title=name.map { "应用并保存"+$0 } ?? "应用自定义"
+        saveButton?.title=name == nil ? "保存为常用" : "仅保存档位"
+    }
+    @objc func editorChanged() { loadFields() }
+    @objc func resetDraft() { fill(defaultValues(editorSlot() ?? "balance")); statusLabel.stringValue="已载入默认值；保存或应用后生效。" }
+    @objc func frequencyInfo() {
+        alert("CPU 与 GPU 可以采用不同的频率策略，共享功耗预算并不意味着不能分别控制。\n\nCPU：本机现有睿频倍率修改未通过回读验证。CPUTune 的 HWP 控制提供另一条研究路径，但默认支持仅至 macOS 10.15，尚未完成本机 Ventura 和全核心适配。\n\nGPU：WhateverGreen 有核显 RPS 补丁，但并非经过本机验证的独立 MHz 设置接口。当前版本只提供已验证的封装功耗与睿频控制；指定频率暂未开放。")
     }
     func syncSteppers() { step1?.doubleValue=pl1?.doubleValue ?? 5; step2?.doubleValue=pl2?.doubleValue ?? 6 }
     @objc func stepped(_ sender: NSStepper) { (sender.tag == 1 ? pl1 : pl2)?.stringValue=String(format:"%.3f",sender.doubleValue) }
@@ -181,22 +213,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             pl1.stringValue=pair.0; pl2.stringValue=pair.1
             precondition((try? draft()) == nil)
         }
-        loadFields(); print("UI_SMOKE_PASS: input, stepping, turbo, averaging window and invalid values")
+        for (index,slot) in [(1,"balance"),(2,"quiet")] {
+            editor.selectItem(at:index); editorChanged(); precondition(editorSlot()==slot)
+            let values=try! draft(); let expected=presetValues(slot)
+            precondition(values.0==expected[0] && values.1==expected[1] && values.2==expected[2] && values.3==expected[3])
+            precondition(saveButton.title=="仅保存档位")
+        }
+        editor.selectItem(at:0); loadFields(); print("UI_SMOKE_PASS: input, stepping, turbo, averaging window and invalid values")
     }
     @objc func applyCustom() {
-        do { let (a,b,t,w)=try draft(); request("custom \(a) \(b) \(t) \(w)") } catch { alert(error.localizedDescription) }
+        do { let (a,b,t,w)=try draft(); request("\(editorSlot().map { "preset "+$0 } ?? "custom") \(a) \(b) \(t) \(w)") } catch { alert(error.localizedDescription) }
     }
     @objc func saveFavorite() {
-        do { let(a,b,t,w)=try draft(); UserDefaults.standard.set([a,b,t,w],forKey:"favorite"); statusLabel.stringValue="常用配置已保存；应用后才会改变功耗。" } catch { alert(error.localizedDescription) }
+        do { let(a,b,t,w)=try draft(); if let slot=editorSlot() { request("save \(slot) \(a) \(b) \(t) \(w)") }
+            else { UserDefaults.standard.set([a,b,t,w],forKey:"favorite"); statusLabel.stringValue="常用配置已保存；应用后才会改变功耗。" } } catch { alert(error.localizedDescription) }
     }
     @objc func loadFavorite() {
         guard let v=UserDefaults.standard.array(forKey:"favorite") as? [Int],v.count==4,let i=windows.firstIndex(of:v[3]) else { alert("尚未保存常用配置。");return }
         pl1.stringValue=String(format:"%.3f",Double(v[0])/8); pl2.stringValue=String(format:"%.3f",Double(v[1])/8); turbo.state=v[2] == 1 ? .on : .off; tau.selectItem(at:i); syncSteppers()
-        statusLabel.stringValue="常用配置已载入；点击应用自定义生效。"
+        statusLabel.stringValue="常用配置已载入；点击应用按钮生效。"
     }
     @objc func preset(_ sender: AnyObject) {
+        guard pending == nil else {return}
         let tag: Int
         if let r=sender as? NSMenuItem {tag=r.tag} else if let b=sender as? NSButton {tag=b.tag} else {return}
+        editor?.selectItem(at:tag < 2 ? tag+1 : 0); updateEditorTitles()
         if tag == 2 { let v=read("custom.txt"); if !v.isEmpty {request("custom "+v)}; return }
         request(["balance","quiet","custom","original"][tag])
     }
@@ -207,18 +248,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             try FileManager.default.createDirectory(at:control,withIntermediateDirectories:true,attributes:[.posixPermissions:0o700])
             let id=UUID().uuidString; pending=id
             try Data("\(command)\n\(id)\n".utf8).write(to:control.appendingPathComponent("request"),options:.atomic)
-            applyButton?.isEnabled=false; statusLabel?.stringValue="等待硬件回读验证…"
+            applyButton?.isEnabled=false; saveButton?.isEnabled=false; editor?.isEnabled=false; statusLabel?.stringValue="等待处理结果…"
             let work=DispatchWorkItem { [weak self] in
                 guard let self=self,self.pending==id else{return}
-                self.pending=nil; self.applyButton?.isEnabled=true; self.statusLabel?.stringValue="尚未收到验证结果，请刷新读数或查看诊断。"
+                self.pending=nil; self.applyButton?.isEnabled=true; self.saveButton?.isEnabled=true; self.editor?.isEnabled=true; self.statusLabel?.stringValue="尚未收到验证结果，请刷新读数或查看诊断。"
             }; timeout=work; DispatchQueue.main.asyncAfter(deadline:.now()+15,execute:work)
-        } catch { pending=nil; applyButton?.isEnabled=true; alert(error.localizedDescription) }
+        } catch { pending=nil; applyButton?.isEnabled=true; saveButton?.isEnabled=true; editor?.isEnabled=true; alert(error.localizedDescription) }
     }
     func updateStatus() {
         let s=read("status.txt")
         if let id=pending {
             if read("request-id.txt") == id {
-                pending=nil; timeout?.cancel(); timeout=nil; applyButton?.isEnabled=true
+                pending=nil; timeout?.cancel(); timeout=nil; applyButton?.isEnabled=true; saveButton?.isEnabled=true; editor?.isEnabled=true
                 if s.contains("已回读验证") {loadFields()}
             } else { return }
         }

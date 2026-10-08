@@ -46,6 +46,30 @@ class ControllerTests(unittest.TestCase):
   self.assertIn('已回退并验证',self.runrequest('custom 36 48 0 8'))
   self.assertEqual(self.getstate()['610'],self.orig);self.assertEqual(self.getstate()['1a0'],self.origTurbo)
   self.assertFalse((self.base/'settings.json').exists())
+ def test_named_presets_save_without_hardware_change(self):
+  self.runrequest('balance'); before=self.getstate();settings=(self.base/'settings.json').read_text()
+  self.assertIn('当前硬件设置未改变',self.runrequest('save quiet 32 40 0 1'))
+  self.assertIn('当前硬件设置未改变',self.runrequest('save balance 40 48 1 8'))
+  self.assertEqual(self.getstate(),before);self.assertEqual((self.base/'settings.json').read_text(),settings)
+  self.assertEqual((self.base/'preset-quiet.txt').read_text().strip(),'32 40 0 1')
+  self.runrequest('quiet');state=self.getstate();self.assertEqual(int(state['610'],16)&0x7fff,32)
+  self.assertTrue(int(state['1a0'],16)&(1<<38))
+  self.assertEqual(json.loads((self.base/'settings.json').read_text())['tau'],1)
+  self.runrequest('reapply');self.assertEqual(self.getstate()['610'],state['610'])
+  self.runrequest('balance');self.assertEqual(json.loads((self.base/'settings.json').read_text())['tau'],8)
+  self.assertFalse(int(self.getstate()['1a0'],16)&(1<<38))
+ def test_named_preset_apply_only_persists_on_success(self):
+  self.runrequest('preset quiet 36 40 1 4')
+  self.assertEqual((self.base/'preset-quiet.txt').read_text().strip(),'36 40 1 4')
+  self.assertFalse(int(self.getstate()['1a0'],16)&(1<<38))
+  before=self.getstate();s=before.copy();s['rejectNext']=True;self.setstate(s)
+  self.assertIn('已回退并验证',self.runrequest('preset quiet 32 36 0 8'))
+  self.assertEqual((self.base/'preset-quiet.txt').read_text().strip(),'36 40 1 4')
+  self.assertEqual(self.getstate()['610'],before['610']);self.assertEqual(self.getstate()['1a0'],before['1a0'])
+ def test_invalid_named_presets_cannot_write(self):
+  for req in ['save original 40 48 1 0','save ../quiet 40 48 1 0','save quiet 29 40 0 1','preset balance 40 39 1 0','save quiet 40 48 0 3','save quiet 40 48 0 1 extra']:
+   self.runrequest(req);self.assertEqual(self.getstate()['writes'],0)
+  self.assertFalse(list(self.base.glob('preset-*.txt')))
  def test_legacy_profiles_and_request(self):
   for profile in ['quiet','balance','original']:
    self.assertIn('已回读验证',self.runrequest(profile))

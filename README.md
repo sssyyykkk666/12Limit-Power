@@ -8,7 +8,8 @@
 - 允许 / 关闭 Intel 睿频，可与功耗独立组合。
 - PL1 平均时间：沿用原始值，或 1 / 2 / 4 / 8 / 16 / 28 秒。PL2 时间、限值启用与保护位保持原状。
 - 保存 / 载入一组常用配置；保存本身不会改变硬件。成功应用的自定义配置可从菜单栏再次使用。
-- 平衡（5 / 6W、允许睿频）、节能（5 / 5W、关闭睿频）、恢复原始设置。
+- 平衡、节能可分别编辑并保存 PL1、PL2、睿频和平均时间；“仅保存档位”不改当前硬件，“应用并保存”通过回读后保存。菜单栏显示保存后的功耗与睿频并一键切换。保存当前活动档位后，下一次选择、重启或唤醒重应用会使用新定义。
+- 默认平衡 5 / 6W、允许睿频；默认节能 5 / 5W、关闭睿频。“载入默认值”只填入草稿，保存或应用后生效。恢复原始设置始终使用安装前备份。
 - 手动刷新频率、封装功耗、温度及采样时间；同时显示实际硬件限值。
 - 系统启动时恢复最后成功配置；菜单应用在唤醒后重新提交。登录自动启动可切换，默认收起窗口。
 
@@ -18,9 +19,13 @@
 
 ## 频率与 GPU 的实际限制
 
-本机读出的睿频上限为单核 3.0GHz、双核 2.6GHz。参考 [TurboTune](https://github.com/tc466/TurboTune) 与 [Intel MSR 手册](https://www.intel.com/content/dam/develop/external/us/en/documents/335592-sdm-vol-4.pdf)，测试降低睿频倍率至 1.2 / 1.8GHz；写入后仍读回原始值，未通过验证，因此不开放指定频率或锁频功能。现有 VoltageShift 驱动的 MSR 读写只在当前执行核心进行，不能保证全核心 HWP 设置；未采用它做假性的全核心限频。
+本机读出的睿频上限为单核 3.0GHz、双核 2.6GHz。参考 [TurboTune](https://github.com/tc466/TurboTune) 与 [Intel MSR 手册](https://www.intel.com/content/dam/develop/external/us/en/documents/335592-sdm-vol-4.pdf)，测试降低睿频倍率至 1.2 / 1.8GHz；写入后仍读回原始值，未通过验证，因此当前版本不开放指定频率或锁频功能。这个测试仅说明该倍率路径未生效，不证明所有限频方法都不可能。现有 VoltageShift 驱动的 MSR 读写只在当前执行核心进行，不能保证全核心 HWP 设置；未采用它做假性的全核心限频。
 
-HD Graphics 615 与 CPU 共用封装功耗预算。暂未找到经本机验证有效的原生 macOS 独立 GPU 频率控制接口，因此窗口说明此项不可用。未改电压、GPU 电压、温度保护、风扇或 SIP 配置。
+CPU 和 HD Graphics 615 拥有不同的频率控制机制，共用封装功耗预算并不意味着不能分别设定策略。当前没有集成本机验证有效的 GPU MHz 控制接口。
+
+[CPUTune](https://github.com/syscl/CPUTune) 发布了运行时 HWP 性能请求和睿频倍率控制代码，提供另一条 CPU 限频研究路径。但默认支持范围仅至 macOS 10.15，不能视为已兼容本机 13.7.8；源码的 MSR 写入也未实现全核心同步和本项目的回读验证。HWP 请求值是性能级别，不能直接承诺某个固定 GHz。其温度保护及 SIP 配置不适合原样带入本项目；本次仅研究，未安装或复制代码。
+
+[WhateverGreen](https://github.com/acidanthera/WhateverGreen) 提供 Kaby Lake 核显相关补丁，其中 RPS 补丁在提交任务时请求硬件最高性能级别，目标不是节能限频；它不是可直接安装的独立 MHz 调节库。仍需针对 HD 615、Apple 图形驱动和当前系统研究并验证。未改电压、GPU 电压、温度保护或 SIP 配置。
 
 [CPUFriend](https://github.com/acidanthera/CPUFriend) / [CPUFriendFriend](https://github.com/corpnewt/CPUFriendFriend) 也经过研究：它们依赖内核电源数据注入，未安装到这台原生 Mac。界面分区参考 [Stats](https://github.com/exelban/stats) 的设计思路；未复制其代码或引入实时监控模块。
 
@@ -55,7 +60,7 @@ sudo bash scripts/install-upgrade.sh
 python3 -m unittest discover -s tests -v
 ```
 
-纯策略测试覆盖边界、畸形输入、时间编码与非目标寄存器位保留。模拟后端测试覆盖自定义、重应用、只读刷新、预设、完整恢复、参数拒绝及写入回读失败后的回退，测试不写真实硬件。`scripts/verify-profiles.sh` 是本机硬件预设测试；`scripts/verify-custom.sh` 检查本机自定义、平均时间、睿频、重应用、越界拒绝、只读刷新及完整恢复，最终留在平衡档。
+纯策略测试覆盖边界、畸形输入、时间编码与非目标寄存器位保留。模拟后端测试覆盖自定义、重应用、只读刷新、预设、完整恢复、参数拒绝及写入回读失败后的回退，测试不写真实硬件。命名档位还覆盖只保存不写硬件、相互独立、睿频自由组合、重应用及验证失败不覆盖定义。`scripts/verify-named-presets.sh` 验证本机命名档位，结束时还原原有定义与所选档位。`scripts/verify-profiles.sh` 是本机默认预设测试；`scripts/verify-custom.sh` 检查本机自定义、平均时间、睿频、重应用、越界拒绝、只读刷新及完整恢复，最终留在平衡档。
 
 固件或 macOS 可能再次调整限值。手动刷新显示采样时刻硬件值；重新应用需要选择档位。配置回读一致并不能证明所有任务的卡顿已经消失。
 
@@ -73,3 +78,4 @@ GPL-3.0，见 LICENSE。VoltageShift 官方 1.25 二进制和上游源码随附�
 
 - v1.0.0：FYQMac 菜单栏、固定档位、启动恢复和回读验证。
 - v1.1.0：12Limit Power，增加原生窗口、自定义功耗与平均时间、独立睿频、常用配置、实际限值显示及失败回退。
+- v1.2.0：独立保存平衡 / 节能档位、保存与应用分离、动态菜单标签、载入默认值，以及更准确的 CPU / GPU 频率支持说明。

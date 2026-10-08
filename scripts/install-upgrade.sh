@@ -13,7 +13,7 @@ for name in baseline.plist controller.sh selected.txt; do
   [ -e "$BACKUP/$name" ] || cp -p "$BASE/$name" "$BACKUP/$name"
 done
 if [ -d /Applications/FYQMac.app ] && [ ! -e "$BACKUP/FYQMac.app" ]; then /usr/bin/ditto /Applications/FYQMac.app "$BACKUP/FYQMac.app"; fi
-if [ -d "$APP" ] && [ ! -e "$BASE/backups/pre-upgrade.app" ]; then /usr/bin/ditto "$APP" "$BASE/backups/pre-upgrade.app"; fi
+if [ -d "$APP" ] && [ ! -e "$BASE/backups/v1.1.app" ]; then /usr/bin/ditto "$APP" "$BASE/backups/v1.1.app"; fi
 if [ -f /Users/skyfu/Library/LaunchAgents/local.fyqmac.menu.plist ]; then ENABLED=1; else ENABLED=0; fi
 /usr/bin/sudo -u skyfu /bin/launchctl bootout gui/501/local.fyqmac.menu 2>/dev/null || true
 /usr/bin/pkill -u 501 -x FYQMac 2>/dev/null || true
@@ -23,10 +23,11 @@ if [ -f /Users/skyfu/Library/LaunchAgents/local.fyqmac.menu.plist ]; then ENABLE
 chown -R root:wheel "$APP"
 /bin/bash "$SRC/scripts/deploy-controller.sh"
 # Boot service re-applies the last saved configuration; wait for its versioned state.
-for attempt in {1..20}; do [ ! -f "$BASE/settings.json" ] || break; sleep 1; done
-[ -f "$BASE/settings.json" ] || { echo 'Backend did not report successful configuration; preserving backups.'; exit 1; }
+versionReady() { /usr/bin/perl -MJSON::PP -e 'local $/; $v=decode_json(<>); exit(($v->{backendVersion}//"") eq "1.2.0" ? 0:1)' "$BASE/settings.json" 2>/dev/null; }
+for attempt in {1..20}; do if versionReady; then break; fi; sleep 1; done
+versionReady || { echo 'Backend did not report successful configuration; preserving backups.'; exit 1; }
 if [ "$ENABLED" = 1 ]; then /usr/bin/sudo -H -u skyfu /bin/bash "$SRC/scripts/deploy-menu.sh"; fi
 /usr/bin/codesign --verify --deep --strict "$APP"
 cmp "$BASE/baseline.plist" "$BACKUP/baseline.plist"
 rm -rf /Applications/FYQMac.app
-printf '12Limit Power 1.1.0 installed; original baseline preserved.\n'
+printf '12Limit Power 1.2.0 installed; original baseline preserved.\n'
