@@ -1,0 +1,6 @@
+build/
+downloads/
+logs/
+.DS_Store
+
+vendor/upstream-source/voltageshift_*.zip
