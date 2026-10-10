@@ -2,7 +2,10 @@
 set -euo pipefail
 export LC_ALL=C
 BASE='/Library/Application Support/FYQMac'
-REQUEST='/Users/skyfu/Library/Application Support/FYQMacControl/request'
+# Root-owned installation metadata; never accept paths from UI requests.
+CONTROL_HOME=$(/usr/bin/defaults read "$BASE/device" home)
+CONTROL_UID=$(/usr/bin/defaults read "$BASE/device" uid)
+REQUEST="$CONTROL_HOME/Library/Application Support/FYQMacControl/request"
 cd "$BASE"
 exec >> "$BASE/controller.log" 2>&1
 requestID=''
@@ -13,6 +16,9 @@ status() {
 trap 'status "应用失败，已保留上次成功配置；请查看日志"' ERR
 readreg() { "$BASE/voltageshift" read "$1" | /usr/bin/perl -ne 'if(/\(([01 ]+)\)/){$b=$1;$b=~s/ //g;print unpack("H16",pack("B64",$b)),"\n" if length($b)==64}'; }
 [ "$(/usr/sbin/sysctl -n hw.model)" = MacBook10,1 ] || { status '机型不符，未修改设置'; exit 0; }
+TARGET_CPU=$(cat "$BASE/target-cpu.txt" 2>/dev/null || printf i7-7Y75)
+case "$TARGET_CPU" in m3-7Y32|i7-7Y75) ;; *) status '目标 CPU 配置无效'; exit 0;; esac
+[[ "$(/usr/sbin/sysctl -n machdep.cpu.brand_string)" = *"$TARGET_CPU"* ]] || { status 'CPU 不符，未修改设置'; exit 0; }
 if ! /usr/sbin/ioreg -r -c VoltageShiftAnVMSR | /usr/bin/grep -q VoltageShiftAnVMSR; then
  /usr/bin/kextutil -q "$BASE/VoltageShift.kext" || { status 'VoltageShift 驱动未就绪'; exit 0; }
 fi
@@ -27,7 +33,7 @@ profile=$(cat selected.txt 2>/dev/null || printf balance)
 custom=$(cat custom.txt 2>/dev/null || printf '40 48 1 0')
 action=$profile
 pendingPreset=''
-if [ -f "$REQUEST" ] && [ ! -L "$REQUEST" ] && [ "$(/usr/bin/stat -f %u "$REQUEST")" = 501 ]; then
+if [ -f "$REQUEST" ] && [ ! -L "$REQUEST" ] && [ "$(/usr/bin/stat -f %u "$REQUEST")" = "$CONTROL_UID" ]; then
  mv "$REQUEST" incoming.request
  size=$(/usr/bin/stat -f %z incoming.request)
  if [ "$size" -le 256 ]; then
@@ -106,7 +112,7 @@ trap 'status "设置已生效，状态保存失败，请查看日志"' ERR
 if [ -n "$pendingPreset" ]; then printf '%s\n' "$custom" > "preset-$pendingPreset.tmp"; chmod 644 "preset-$pendingPreset.tmp"; mv "preset-$pendingPreset.tmp" "preset-$pendingPreset.txt"; fi
 printf '%s\n' "$profile" > selected.tmp; chmod 644 selected.tmp; mv selected.tmp selected.txt
 if [ "$profile" = custom ]; then printf '%s\n' "$custom" > custom.tmp; chmod 644 custom.tmp; mv custom.tmp custom.txt; fi
-/usr/bin/perl -MJSON::PP -e '$v=hex($ARGV[0]);print encode_json({backendVersion=>"1.2.0",profile=>$ARGV[2],pl1=>($v&0x7fff)/8,pl2=>(($v>>32)&0x7fff)/8,turbo=>$ARGV[1]?JSON::PP::true:JSON::PP::false,tau=>0+$ARGV[3]}),"\n"' "$actual" "$turbo" "$profile" "${args[3]:-0}" > settings.tmp
+/usr/bin/perl -MJSON::PP -e '$v=hex($ARGV[0]);print encode_json({backendVersion=>"1.3.0",profile=>$ARGV[2],pl1=>($v&0x7fff)/8,pl2=>(($v>>32)&0x7fff)/8,turbo=>$ARGV[1]?JSON::PP::true:JSON::PP::false,tau=>0+$ARGV[3]}),"\n"' "$actual" "$turbo" "$profile" "${args[3]:-0}" > settings.tmp
 chmod 644 settings.tmp; mv settings.tmp settings.json
 writeactual "$actual" "$actualTurbo"
 sample

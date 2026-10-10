@@ -7,7 +7,7 @@ my $v=hex($baseline); my ($max1,$max2)=($v&0x7fff,($v>>32)&0x7fff);
 die "Invalid original limits\n" unless $max1>=30 && $max2>=30;
 if($op eq 'capabilities') {
  print encode_json({minWatts=>3.75,maxPL1=>$max1/8,maxPL2=>$max2/8,stepWatts=>0.125,recommendedPL1=>7,frequencySupported=>JSON::PP::false,gpuSupported=>JSON::PP::false,
- frequencyReason=>'本机睿频倍率写入未通过回读验证；现有驱动不能可靠设置所有核心的 HWP 上限。',gpuReason=>'HD Graphics 615 与 CPU 共享封装功耗，暂无本机验证有效的独立 GPU 控制接口。'}),"\n"; exit;
+ frequencyReason=>'本机当前未提供已验证的睿频倍率控制；现有驱动不能可靠设置所有核心的 HWP 上限。',gpuReason=>'HD Graphics 615 与 CPU 共享封装功耗，暂无本机验证有效的独立 GPU 控制接口。'}),"\n"; exit;
 }
 die "Invalid operation\n" unless $op eq 'target';
 my ($p1,$p2,$turbo,$tau)=(40,48,1,0);

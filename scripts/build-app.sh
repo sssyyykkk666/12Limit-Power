@@ -1,10 +1,13 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+TARGET_CPU=$(cat target-cpu.txt)
+FLAGS=()
+case "$TARGET_CPU" in m3-7Y32) FLAGS=(-D M3);; i7-7Y75) ;; *) echo 'Invalid target CPU'; exit 1;; esac
 APP='build/12Limit Power.app'
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-/usr/bin/swiftc -O -target x86_64-apple-macosx13.0 src/PowerApp.swift -o "$APP/Contents/MacOS/12LimitPower"
-cat > "$APP/Contents/Info.plist" <<'PLIST'
+/usr/bin/swiftc -O -target x86_64-apple-macosx13.0 ${FLAGS[@]+"${FLAGS[@]}"} src/PowerApp.swift -o "$APP/Contents/MacOS/12LimitPower"
+cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -12,9 +15,10 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <key>CFBundleName</key><string>12Limit Power</string>
 <key>CFBundleExecutable</key><string>12LimitPower</string>
 <key>CFBundleIconFile</key><string>AppIcon</string>
-<key>CFBundleVersion</key><string>120</string>
+<key>CFBundleVersion</key><string>130</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>1.2.0</string>
+<key>CFBundleShortVersionString</key><string>1.3.0</string>
+<key>LimitTargetCPU</key><string>$TARGET_CPU</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>LSUIElement</key><true/>
 <key>NSHighResolutionCapable</key><true/>

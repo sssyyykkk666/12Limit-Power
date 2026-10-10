@@ -23,7 +23,10 @@ class ControllerTests(unittest.TestCase):
   self.setstate(self.state)
   for key,val in [('power',self.orig),('turbo',self.origTurbo)]:
    subprocess.run(['/usr/bin/defaults','write',str(self.base/'baseline'),key,'-string',val],check=True)
-  src=(ROOT/'scripts/controller.sh').read_text().replace('/Users/skyfu/Library/Application Support/FYQMacControl/request',str(self.req)).replace('/Library/Application Support/FYQMac',str(self.base))
+  src=(ROOT/'scripts/controller.sh').read_text().replace('CONTROL_HOME=$(/usr/bin/defaults read "$BASE/device" home)', 'CONTROL_HOME='+str(self.tmp.name)).replace('CONTROL_UID=$(/usr/bin/defaults read "$BASE/device" uid)', 'CONTROL_UID='+str(os.getuid())).replace('REQUEST="$CONTROL_HOME/Library/Application Support/FYQMacControl/request"', 'REQUEST='+str(self.req)).replace('/Library/Application Support/FYQMac',str(self.base))
+  # Mock hardware identity and readiness without loading a kernel extension.
+  src=src.replace('$(/usr/sbin/sysctl -n hw.model)', 'MacBook10,1').replace('$(/usr/sbin/sysctl -n machdep.cpu.brand_string)', 'Intel(R) Core(TM) i7-7Y75 CPU @ 1.30GHz')
+  src=src.replace('if ! /usr/sbin/ioreg -r -c VoltageShiftAnVMSR | /usr/bin/grep -q VoltageShiftAnVMSR; then','if false; then')
   self.script=pathlib.Path(self.tmp.name)/'controller.sh';self.script.write_text(src)
  def tearDown(self):self.tmp.cleanup()
  def setstate(self,s):(self.base/'mock.json').write_text(json.dumps(s))
@@ -74,3 +77,23 @@ class ControllerTests(unittest.TestCase):
   for profile in ['quiet','balance','original']:
    self.assertIn('已回读验证',self.runrequest(profile))
 if __name__=='__main__':unittest.main()
+
+class M3ControllerTests(ControllerTests):
+ def setUp(self):
+  super().setUp()
+  (self.base/'target-cpu.txt').write_text('m3-7Y32\n')
+  self.script.write_text(self.script.read_text().replace('Intel(R) Core(TM) i7-7Y75 CPU @ 1.30GHz','Intel(R) Core(TM) m3-7Y32 CPU @ 1.20GHz'))
+
+class CPUIdentityTests(unittest.TestCase):
+ setUp=ControllerTests.setUp
+ tearDown=ControllerTests.tearDown
+ setstate=ControllerTests.setstate
+ getstate=ControllerTests.getstate
+ def test_wrong_package_does_not_write(self):
+  (self.base/'target-cpu.txt').write_text('m3-7Y32\n')
+  self.req.write_text('balance\ntest-uuid\n')
+  r=subprocess.run(['bash',str(self.script)],capture_output=True,text=True)
+  self.assertEqual(r.returncode,0)
+  self.assertIn('CPU 不符',(self.base/'status.txt').read_text())
+  self.assertEqual(self.getstate()['writes'],0)
+  self.assertTrue(self.req.exists())

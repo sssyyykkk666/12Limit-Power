@@ -1,6 +1,12 @@
 import AppKit
 import Darwin
 
+#if M3
+let targetCPU = "m3-7Y32"
+#else
+let targetCPU = "i7-7Y75"
+#endif
+
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegate {
     let backend = URL(fileURLWithPath: "/Library/Application Support/FYQMac")
     let control = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/FYQMacControl")
@@ -34,7 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         guard let data = try? Data(contentsOf: backend.appendingPathComponent(name)), let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [:] }
         return value
     }
-    func maxPower(_ key: String) -> Double { (json("capabilities.json")[key] as? NSNumber)?.doubleValue ?? 49 }
+    func maxPower(_ key: String) -> Double { (json("capabilities.json")[key] as? NSNumber)?.doubleValue ?? 7 }
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         installMainMenu()
@@ -57,7 +63,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 guard let view = self.window?.contentView, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
                 if CommandLine.arguments.contains("--self-test") { self.selfTest() }
                 view.cacheDisplay(in: view.bounds, to: rep)
-                let path = ProcessInfo.processInfo.environment["LIMIT_PREVIEW_PATH"] ?? "/Users/skyfu/Downloads/FYQMac/build/preview.png"
+                let path = ProcessInfo.processInfo.environment["LIMIT_PREVIEW_PATH"] ?? "/tmp/12limit-preview.png"
                 try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
                 print("Window rendered; two power inputs, turbo, averaging window, login and presets available.")
                 NSApp.terminate(nil)
@@ -128,7 +134,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         NSLayoutConstraint.activate([stack.leadingAnchor.constraint(equalTo:content.leadingAnchor,constant:24),stack.trailingAnchor.constraint(equalTo:content.trailingAnchor,constant:-24),stack.topAnchor.constraint(equalTo:content.topAnchor,constant:22)])
         func add(_ view: NSView, full: Bool = true) { stack.addArrangedSubview(view); if full { view.widthAnchor.constraint(equalTo:stack.widthAnchor).isActive = true } }
         add(text("12Limit Power",size:26,weight:.semibold))
-        add(text("12 英寸 MacBook · Core m3-7Y32 · 轻量功耗控制",color:.secondaryLabelColor))
+        add(text("12 英寸 MacBook · Core \(targetCPU) · HD Graphics 615 · 轻量功耗控制",color:.secondaryLabelColor))
         statusLabel = text("读取状态…",size:12,color:.secondaryLabelColor); add(statusLabel)
         actualLabel = text("",size:13,weight:.medium); add(actualLabel)
         sampleLabel = text("",size:13,color:.secondaryLabelColor); add(sampleLabel)
@@ -140,7 +146,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         add(powerRow("持续功耗 · PL1",index:1)); add(powerRow("短时功耗 · PL2",index:2))
         let max1=maxPower("maxPL1"),max2=maxPower("maxPL2")
         add(text(String(format:"步进 0.125W · PL1 3.75–%.3gW · PL2 ≥ PL1、≤ %.3gW",max1,max2),size:12,color:.secondaryLabelColor))
-        add(text("无风扇机型建议持续 3.75–7W。固件原始 49W 是限值，并非可持续散热能力。封装限值也覆盖核显，不是整机功耗。",size:12,color:.secondaryLabelColor))
+        add(text("无风扇机型建议持续 3.75–7W。安装前读取的固件功耗是限值，并非可持续散热能力。封装限值也覆盖核显，不是整机功耗。",size:12,color:.secondaryLabelColor))
         turbo = NSButton(checkboxWithTitle: "允许 Intel 睿频", target:self, action:nil); add(turbo)
         tau = NSPopUpButton(); tau.addItems(withTitles:["沿用原始时间","1 秒","2 秒","4 秒","8 秒","16 秒","28 秒"])
         add(horizontal([text("持续功耗平均时间"),spacer(),tau]))
@@ -192,7 +198,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     @objc func editorChanged() { loadFields() }
     @objc func resetDraft() { fill(defaultValues(editorSlot() ?? "balance")); statusLabel.stringValue="已载入默认值；保存或应用后生效。" }
     @objc func frequencyInfo() {
-        alert("CPU 与 GPU 可以采用不同的频率策略，共享功耗预算并不意味着不能分别控制。\n\nCPU：本机现有睿频倍率修改未通过回读验证。CPUTune 的 HWP 控制提供另一条研究路径，但默认支持仅至 macOS 10.15，尚未完成本机 Ventura 和全核心适配。\n\nGPU：WhateverGreen 有核显 RPS 补丁，但并非经过本机验证的独立 MHz 设置接口。当前版本只提供已验证的封装功耗与睿频控制；指定频率暂未开放。")
+        alert("CPU 与 GPU 可以采用不同的频率策略，共享功耗预算并不意味着不能分别控制。\n\nCPU：上游 m3 机型的睿频倍率修改未通过回读验证；i7-7Y75 的倍率修改尚未实测。CPUTune 的 HWP 控制提供另一条研究路径，但默认支持仅至 macOS 10.15，尚未完成本机 Ventura 和全核心适配。\n\nGPU：WhateverGreen 有核显 RPS 补丁，但并非经过本机验证的独立 MHz 设置接口。当前版本提供封装功耗与睿频控制，每次应用必须通过本机回读验证；指定频率暂未开放。")
     }
     func syncSteppers() { step1?.doubleValue=pl1?.doubleValue ?? 5; step2?.doubleValue=pl2?.doubleValue ?? 6 }
     @objc func stepped(_ sender: NSStepper) { (sender.tag == 1 ? pl1 : pl2)?.stringValue=String(format:"%.3f",sender.doubleValue) }
@@ -209,7 +215,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         let value=try! draft(); precondition(value.0==41 && value.1==50 && value.2==0 && value.3==8)
         syncSteppers(); precondition(step1.doubleValue==5.125 && step2.doubleValue==6.25)
         step1.doubleValue=4.5; stepped(step1); precondition(pl1.stringValue=="4.500")
-        for pair in [("2","6"),("5","4"),("49.125","49.125"),("5.1","6"),("nan","6")] {
+        for pair in [("2","6"),("5","4"),(String(maxPower("maxPL1")+0.125),String(maxPower("maxPL2")+0.125)),("5.1","6"),("nan","6")] {
             pl1.stringValue=pair.0; pl2.stringValue=pair.1
             precondition((try? draft()) == nil)
         }
@@ -244,6 +250,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     func request(_ command: String) {
         if preview {return}
         guard pending == nil else {return}
+        guard FileManager.default.fileExists(atPath:backend.appendingPathComponent("device.plist").path),
+              !json("capabilities.json").isEmpty else {
+            statusLabel?.stringValue="后端尚未就绪：请先批准并加载驱动，再运行 setup-device.sh。当前未修改硬件。"
+            return
+        }
         do {
             try FileManager.default.createDirectory(at:control,withIntermediateDirectories:true,attributes:[.posixPermissions:0o700])
             let id=UUID().uuidString; pending=id
@@ -263,7 +274,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 if s.contains("已回读验证") {loadFields()}
             } else { return }
         }
-        statusLabel?.stringValue=s.replacingOccurrences(of:"睿频 1",with:"睿频开").replacingOccurrences(of:"睿频 0",with:"睿频关")
+        statusLabel?.stringValue=(s.isEmpty ? "后端尚未就绪：请按 README 完成本机初始化。" : s).replacingOccurrences(of:"睿频 1",with:"睿频开").replacingOccurrences(of:"睿频 0",with:"睿频关")
         let a=json("actual.json")
         if let p=a["pl1"] as? NSNumber,let q=a["pl2"] as? NSNumber {
             actualLabel?.stringValue=String(format:"硬件读回  ·  %.3g / %.3g W  ·  睿频%@",p.doubleValue,q.doubleValue,(a["turbo"] as? Bool) == true ? "开启":"关闭")

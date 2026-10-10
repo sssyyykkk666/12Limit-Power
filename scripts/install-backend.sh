@@ -1,6 +1,6 @@
 #!/bin/bash
 set -euo pipefail
-BASE='/Users/skyfu/Downloads/FYQMac'
+BASE=$(cd "$(dirname "$0")/.." && pwd)
 DEST='/Library/Application Support/FYQMac'
 mkdir -p "$DEST"
 if [ -e "$DEST/voltageshift" ]; then echo 'Backend already exists; stopping to preserve existing install.'; exit 1; fi
